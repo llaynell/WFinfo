@@ -97,4 +97,7 @@
     <PackageReference Include="WebSocketSharp-netstandard" Version="1.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="6.0.1" /> 
   </ItemGroup>
+  <ItemGroup>
+    <Folder Include="LanguageSupport\" />
+  </ItemGroup>
 </Project>

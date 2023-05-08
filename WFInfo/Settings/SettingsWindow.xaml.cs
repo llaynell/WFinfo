@@ -1,8 +1,10 @@
-using System;
+﻿using System;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using WFInfo.LanguageSupport;
 
 namespace WFInfo.Settings
 {
@@ -18,10 +20,10 @@ namespace WFInfo.Settings
 
         public SettingsWindow()
         {
-            
             InitializeComponent();
             DataContext = this;
             _viewModel = SettingsViewModel.Instance;
+            UpdateLocales();
         }
 
         public void populate()
@@ -204,6 +206,31 @@ namespace WFInfo.Settings
             });
         }
 
+        private void UpdateLocales()
+        {
+            string[][] array = LocaleDataBuilder.FindLocales();
+            localeCombobox.Items.Clear();
+            AddLocaleCBI("en", "English");
+            AddLocaleCBI("ko", "한국어");
+            foreach (string[] array3 in array)
+            {
+                _viewModel.Locale.Equals(array3[2]);
+                AddLocaleCBI(array3[0], array3[2]);
+            }
+            localeCombobox.Items.Refresh();
+        }
+
+        private void AddLocaleCBI(string tag, string content)
+        {
+            ComboBoxItem comboBoxItem = new ComboBoxItem();
+            comboBoxItem.Tag = tag;
+            comboBoxItem.Content = content;
+            comboBoxItem.FontSize = 14.0;
+            BrushConverter brushConverter = new BrushConverter();
+            // TODO: cache color for xaml
+            comboBoxItem.Background = (Brush)brushConverter.ConvertFrom("#FF1B1B1B");
+            localeCombobox.Items.Add(comboBoxItem);
+        }
 
         private void LightRadioChecked(object sender, RoutedEventArgs e)
         {

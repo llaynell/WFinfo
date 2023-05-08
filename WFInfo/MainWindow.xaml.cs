@@ -116,7 +116,7 @@ namespace WFInfo
             SettingsWindow.Save();
 
             Main.dataBase.JWT = EncryptedDataService.LoadStoredJWT();
-
+            Main.dataBase.UpdateLocaleFromSettings();
         }
 
         public void OnContentRendered(object sender, EventArgs e)

@@ -15,6 +15,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Tesseract;
+using WFInfo.LanguageSupport;
 using WFInfo.Settings;
 using Brushes = System.Drawing.Brushes;
 using Clipboard = System.Windows.Forms.Clipboard;
@@ -121,7 +122,7 @@ namespace WFInfo
         // Screen / Resolution Scaling - Used to adjust pixel values to each person's monitor
         public static double screenScaling;
 
-        public static Regex RE = new Regex("[^a-z가-힣]", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        public static Regex RE;
 
         // Pixel measurements for reward screen @ 1920 x 1080 with 100% scale https://docs.google.com/drawings/d/1Qgs7FU2w1qzezMK-G1u9gMTsQZnDKYTEU36UPakNRJQ/edit
         public const int pixleRewardWidth = 968;
@@ -131,6 +132,8 @@ namespace WFInfo
 
         public const int SCALING_LIMIT = 100;
         public static bool processingActive = false;
+
+        private static readonly string _defaultRegex = "a-z가-힣";
 
         private static Bitmap bigScreenshot;
         private static Bitmap partialScreenshot;
@@ -157,6 +160,21 @@ namespace WFInfo
             _tesseractService.Init();
             _soundPlayer = soundPlayer;
             _settings = settings;
+            ReloadRegex();
+        }
+
+        internal static void ReloadRegex()
+        {
+            string text = _defaultRegex;
+            if (_settings != null)
+            {
+                text = LocaleDataBuilder.ReadRegexSymbols(_settings.Locale);
+                if (string.IsNullOrEmpty(text))
+                {
+                    text = _defaultRegex;
+                }
+            }
+            RE = new Regex("[^" + text + "]", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         }
 
         internal static void ProcessRewardScreen(Bitmap file = null)
@@ -245,6 +263,7 @@ namespace WFInfo
                     string part = firstChecks[i];
                     #region found a part
                     string correctName = Main.dataBase.GetPartName(part, out firstProximity[i], false, out _);
+                    string localizedName = Main.dataBase.getLocaleNameData(correctName);
                     string primeSetName = Main.dataBase.GetSetName(correctName);
                     JObject job = (JObject)Main.dataBase.marketData.GetValue(correctName);
                     JObject primeSet = (JObject)Main.dataBase.marketData.GetValue(primeSetName);
@@ -297,7 +316,8 @@ namespace WFInfo
                     {
                         if (!string.IsNullOrEmpty(clipboard)) { clipboard += "-  "; }
 
-                        clipboard += "[" + correctName.Replace(" Blueprint", "") + "]: " + plat + ":platinum: ";
+                        string nameWithoutBlueprint = Main.dataBase.localizedLanguageProvider.GetNameWithoutBlueprint(localizedName, " ");
+                        clipboard += "[" + nameWithoutBlueprint + "]: " + plat + ":platinum: ";
 
                         if (primeSetPlat != null)
                         {
@@ -325,20 +345,21 @@ namespace WFInfo
 
                         if (_settings.IsOverlaySelected)
                         {
-                            Main.overlays[partNumber].LoadTextData(correctName, plat, primeSetPlat, ducats, volume, vaulted, mastered, $"{partsOwned} / {partsCount}", "", hideRewardInfo, false);
+                            Main.overlays[partNumber].LoadTextData(localizedName, plat, primeSetPlat, ducats, volume, vaulted, mastered, $"{partsOwned} / {partsCount}", "", hideRewardInfo, false);
                             Main.overlays[partNumber].Resize(overWid);
                             Main.overlays[partNumber].Display((int)((startX + width / 4 * partNumber + _settings.OverlayXOffsetValue) / dpiScaling), startY + (int)(_settings.OverlayYOffsetValue / dpiScaling), _settings.Delay);
                         }
                         else if (!_settings.IsLightSelected)
                         {
-                            Main.window.loadTextData(correctName, plat, primeSetPlat, ducats, volume, vaulted, mastered, $"{partsOwned} / {partsCount}", partNumber, true, hideRewardInfo);
+                            Main.window.loadTextData(localizedName, plat, primeSetPlat, ducats, volume, vaulted, mastered, $"{partsOwned} / {partsCount}", partNumber, true, hideRewardInfo);
                         }
                         //else
-                        //Main.window.loadTextData(correctName, plat, ducats, volume, vaulted, $"{partsOwned} / {partsCount}", partNumber, false, hideRewardInfo);
+                        //Main.window.loadTextData(localizedName, plat, ducats, volume, vaulted, $"{partsOwned} / {partsCount}", partNumber, false, hideRewardInfo);
 
                         if (_settings.Clipboard && !string.IsNullOrEmpty(clipboard))
+                        {
                             Clipboard.SetText(clipboard);
-
+                        }
                     });
                     partNumber++;
                     hideRewardInfo = false;
@@ -629,10 +650,7 @@ namespace WFInfo
         /// <returns>If part name is close enough to valid to actually process</returns>
         internal static bool PartNameValid (string partName)
         {
-            if ((partName.Length < 13 && _settings.Locale == "en") || (partName.Replace(" ", "").Length < 6 && _settings.Locale == "ko")) // if part name is smaller than "Bo prime handle" skip current part 
-                //TODO: Add a min character for other locale here.
-                return false;
-            return true;
+            return partName.Length >= Main.dataBase.localizedLanguageProvider.GetMininunLenght();
         }
 
         /// <summary>
@@ -671,6 +689,7 @@ namespace WFInfo
                 }
                 Debug.WriteLine($"Part  {foundParts.IndexOf(part)} out of {foundParts.Count}");
                 string name = Main.dataBase.GetPartName(part.Name, out int levenDist, false, out bool multipleLowest);
+                string localizedName = Main.dataBase.getLocaleNameData(name);
                 string primeSetName = Main.dataBase.GetSetName(name);
                 if (levenDist > Math.Min(part.Name.Length, name.Length) / 3 || multipleLowest)
                 {
@@ -698,7 +717,7 @@ namespace WFInfo
                 if (_settings.SnapitExport)
                 {
                     var owned = string.IsNullOrEmpty(partsOwned) ? "0" : partsOwned;
-                    csv += name + "," + plat + "," + ducats + "," + volume + "," + vaulted.ToString(Main.culture) + "," + owned + "," + partsDetected + ", \"\"" + Environment.NewLine;
+                    csv += localizedName + "," + plat + "," + ducats + "," + volume + "," + vaulted.ToString(Main.culture) + "," + owned + "," + partsDetected + ", \"\"" + Environment.NewLine;
                 }
 
                 int width = (int)(part.Bounding.Width * screenScaling);
@@ -717,7 +736,7 @@ namespace WFInfo
                 Main.RunOnUIThread(() =>
                 {
                     Overlay itemOverlay = new Overlay();
-                    itemOverlay.LoadTextData(name, plat, primeSetPlat, ducats, volume, vaulted, mastered, partsOwned, partsDetected, false, doWarn);
+                    itemOverlay.LoadTextData(localizedName, plat, primeSetPlat, ducats, volume, vaulted, mastered, partsOwned, partsDetected, false, doWarn);
                     itemOverlay.toSnapit();
                     itemOverlay.Resize(width);
                     itemOverlay.Display((int)(window.X + snapItOrigin.X + (part.Bounding.X - width / 8) / dpiScaling), (int)((window.Y + snapItOrigin.Y + part.Bounding.Y - itemOverlay.Height) / dpiScaling), _settings.SnapItDelay);
@@ -1534,8 +1553,11 @@ namespace WFInfo
                 InventoryItem part = foundParts[i];
                 if (!PartNameValid(part.Name + " Blueprint"))
                     continue;
+                // TODO: change for localized
                 string name = Main.dataBase.GetPartName(part.Name+" Blueprint", out int proximity, true, out _); //add blueprint to name to check against prime drop table
                 string checkName = Main.dataBase.GetPartName(part.Name + " prime Blueprint", out int primeProximity, true, out _); //also add prime to check if that gives better match. If so, this is a non-prime
+                string nameWithBlueprint = Main.dataBase.localizedLanguageProvider.GetNameWithBlueprint(part.Name, " ");
+                string nameWithPrimeBlueprint = Main.dataBase.localizedLanguageProvider.GetNameWithPrimeBlueprint(part.Name, " ");
                 Main.AddLog("Checking \"" + part.Name.Trim() +"\", (" + proximity +")\"" + name + "\", +prime (" + primeProximity + ")\"" + checkName + "\"");
 
                 //Decide if item is an actual prime, if so mark as mastered
@@ -1797,7 +1819,7 @@ namespace WFInfo
 
 
                             //do OCR
-                            _tesseractService.FirstEngine.SetVariable("tessedit_char_whitelist", " ABCDEFGHIJKLMNOPQRSTUVWXYZ&");
+                            _tesseractService.FirstEngine.SetVariable("tessedit_char_whitelist", Main.dataBase.localizedLanguageProvider.GetOcrCharWhitelist());
                             using (var page = _tesseractService.FirstEngine.Process(cloneBitmap, PageSegMode.SingleLine))
                             {
                                 using (var iterator = page.GetIterator())

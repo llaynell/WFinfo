@@ -350,11 +350,7 @@ namespace WFInfo
 
         private static bool IsItemBanned(string item)
         {
-            return item.ToLower(Main.culture).Contains("kuva") ||
-                   item.ToLower(Main.culture).Contains("exilus") ||
-                   item.ToLower(Main.culture).Contains("riven") ||
-                   item.ToLower(Main.culture).Contains("ayatan") ||
-                   item.ToLower(Main.culture).Contains("forma");
+            return Main.dataBase.enLanguageProvider.IsNameDataIgnored(item);
         }
 
         /// <summary>

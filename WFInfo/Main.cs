@@ -76,7 +76,9 @@ namespace WFInfo
                 OCR.Init(new TesseractService(), new SoundPlayer(), ApplicationSettings.GlobalReadonlySettings);
 
                 if (ApplicationSettings.GlobalReadonlySettings.Auto)
+                {
                     dataBase.EnableLogCapture();
+                }
                 if (dataBase.IsJWTvalid().Result)
                 {
                     OCR.VerifyWarframe();

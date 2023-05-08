@@ -87,14 +87,29 @@ namespace WFInfo
             SecondEngine?.Dispose();
             SecondEngine = CreateEngine();
         }
+
+        private JObject GetCheckSums()
+        {
+            JObject jobject = new JObject
+            {
+                { "en", "7af2ad02d11702c7092a5f8dd044d52f" },
+                { "ko", "c776744205668b7e76b190cc648765da" }
+            };
+
+            string[][] moreLocales = Main.dataBase.FindMoreLocales();
+            int length = moreLocales.GetLength(0);
+            for (int i = 0; i < length; i++)
+            {
+                jobject.Add(moreLocales[i][0], moreLocales[i][1]);
+            }
+
+            return jobject;
+        }
+
         private void getLocaleTessdata()
         {
             string traineddata_hotlink_prefix = "https://raw.githubusercontent.com/WFCD/WFinfo/libs/tessdata/";
-            JObject traineddata_checksums = new JObject
-            {
-                {"en", "7af2ad02d11702c7092a5f8dd044d52f"},
-                {"ko", "c776744205668b7e76b190cc648765da"}
-            };
+            JObject traineddata_checksums = GetCheckSums();
 
             // get trainned data
             string traineddata_hotlink = traineddata_hotlink_prefix + Locale + ".traineddata";

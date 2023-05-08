@@ -56,6 +56,8 @@ namespace WFInfo
 
         public static readonly string appdata_tessdata_folder = appPath + @"\tessdata";
 
+        public static readonly string appdata_customlocales_folder = appPath + "\\customLocales";
+
         private static readonly InitialDialogue dialogue = new InitialDialogue();
         public static CancellationTokenSource stopDownloadTask;
         public static string build_version = Assembly.GetExecutingAssembly().GetName().Version.ToString();
@@ -109,6 +111,8 @@ namespace WFInfo
             Directory.CreateDirectory(app_data_tesseract_catalog + @"\x64");
 
             Directory.CreateDirectory(appdata_tessdata_folder);
+
+            Directory.CreateDirectory(appdata_customlocales_folder);
 
             cleanLegacyTesseractIfNeeded();
             bool AvxSupport = isAVX2Available();

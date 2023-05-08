@@ -13,12 +13,14 @@ using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using WebSocketSharp;
+using WFInfo.LanguageSupport;
 using WFInfo.Settings;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace WFInfo
 {
-
     class Data
     {
         public JObject marketItems; // Warframe.market item listing           {<id>: "<name>|<url_name>", ...}
@@ -26,6 +28,9 @@ namespace WFInfo
         public JObject relicData; // Contains relicData from Warframe PC Drops        {<Era>: {"A1":{"vaulted": true,<rare1/uncommon[12]/common[123]>: <part>}, ...}, "Meso": ..., "Neo": ..., "Axi": ...}
         public JObject equipmentData; // Contains equipmentData from Warframe PC Drops          {<EQMT>: {"vaulted": true, "PARTS": {<NAME>:{"relic_name":<name>|"","count":<num>}, ...}},  ...}
         public JObject nameData; // Contains relic to market name translation          {<relic_name>: <market_name>}
+
+        public DataLanguageBase enLanguageProvider => _enLanguageProvider;
+        public DataLanguageBase localizedLanguageProvider => _localizedLanguageProvider;
 
         private static List<Dictionary<int, List<int>>> korean = new List<Dictionary<int, List<int>>>() {
             new Dictionary<int, List<int>>() {
@@ -67,6 +72,9 @@ namespace WFInfo
         private Task autoThread;
         private readonly IReadOnlyApplicationSettings _settings;
 
+        private DataLanguageBase _enLanguageProvider;
+        private DataLanguageBase _localizedLanguageProvider;
+
         public WebClient createWfmClient()
         {
             WebClient webClient = CustomEntrypoint.createNewWebClient();
@@ -86,6 +94,10 @@ namespace WFInfo
             nameDataPath = applicationDirectory + @"\name_data.json";
 
             Directory.CreateDirectory(applicationDirectory);
+
+            LocaleDataBuilder.BuildDefault();
+            _enLanguageProvider = DataLanguageBase.CreateDefault();
+            _localizedLanguageProvider = DataLanguageBase.CreateLocalized(settings.Locale);
 
             // Create websocket for WFM
             WebProxy proxy = null;
@@ -155,6 +167,17 @@ namespace WFInfo
             return Main.VersionToInteger(Main.BuildVersion);
         }
 
+        public string[][] FindMoreLocales()
+        {
+            return LocaleDataBuilder.FindLocales();
+        }
+
+        public void UpdateLocaleFromSettings()
+        {
+            _localizedLanguageProvider = DataLanguageBase.CreateLocalized(_settings.Locale);
+            OCR.ReloadRegex();
+        }
+
         // Load item list from Sheets
         public void ReloadItems()
         {
@@ -170,9 +193,9 @@ namespace WFInfo
                 string name = item["item_name"].ToString();
                 if (name.Contains("Prime "))
                 {
-                    if ((name.Contains("Neuroptics") || name.Contains("Chassis") || name.Contains("Systems") || name.Contains("Harness") || name.Contains("Wings")))
+                    if (_enLanguageProvider.CheckArchwingOrWarframesBlueprintKeys(name))
                     {
-                        name = name.Replace(" Blueprint", "");
+                        name = _enLanguageProvider.GetNameWithoutBlueprint(name, " ");
                     }
                     marketItems[item["id"].ToString()] = name + "|" + item["url_name"];
                 }
@@ -186,7 +209,7 @@ namespace WFInfo
                     Method = HttpMethod.Get
                 })
                 {
-                    request.Headers.Add("language", _settings.Locale);
+                    request.Headers.Add("language", _localizedLanguageProvider.GetMarketItemsLocale());
                     request.Headers.Add("accept", "application/json");
                     request.Headers.Add("platform", "pc");
                     var task = Task.Run(() => client.SendAsync(request));
@@ -205,7 +228,9 @@ namespace WFInfo
                     {
                         string name = item["url_name"].ToString();
                         if (name.Contains("prime") && marketItems.ContainsKey(item["id"].ToString()))
+                        {
                             marketItems[item["id"].ToString()] = marketItems[item["id"].ToString()] + "|" + item["item_name"];
+                        }
                     }
                 }
             }
@@ -249,9 +274,9 @@ namespace WFInfo
                 string name = row["name"].ToString();
                 if (name.Contains("Prime "))
                 {
-                    if ((name.Contains("Neuroptics") || name.Contains("Chassis") || name.Contains("Systems") || name.Contains("Harness") || name.Contains("Wings")))
+					if (this._enLanguageProvider.CheckArchwingOrWarframesBlueprintKeys(name))
                     {
-                       name = name.Replace(" Blueprint", "");
+                       name = _enLanguageProvider.GetNameWithoutBlueprint(name, " ");
                     }
                     marketData[name] = new JObject
                     {
@@ -380,13 +405,13 @@ namespace WFInfo
 
 
                         string gameName = part.Key;
-                        if (prime.Value["type"].ToString() == "Archwing" && (part.Key.Contains("Systems") || part.Key.Contains("Harness") || part.Key.Contains("Wings")))
+                        if (prime.Value["type"].ToString() == "Archwing" && _enLanguageProvider.CheckContainsArchwingBlueprintKeys(part.Key))
                         {
-                            gameName += " Blueprint";
+                            gameName = _enLanguageProvider.GetNameWithBlueprint(gameName, " ");
                         }
-                        else if (prime.Value["type"].ToString() == "Warframes" && (part.Key.Contains("Systems") || part.Key.Contains("Neuroptics") || part.Key.Contains("Chassis")))
+                        else if (prime.Value["type"].ToString() == "Warframes" && this._enLanguageProvider.CheckContainsWarframesBlueprintKeys(part.Key))
                         {
-                            gameName += " Blueprint";
+                            gameName = _enLanguageProvider.GetNameWithBlueprint(gameName, " ");
                         }
                         if (marketData.TryGetValue(partName, out _))
                         {
@@ -584,6 +609,28 @@ namespace WFInfo
             return count;
         }
 
+        public int FindMinLenPartNameLocalized()
+        {
+            int num = int.MaxValue;
+            foreach (KeyValuePair<string, JToken> keyValuePair in marketItems)
+            {
+                string[] array = keyValuePair.Value.ToString().Split(new char[] { '|' });
+                if (array.Length > 2)
+                {
+                    string text = array[2];
+                    if (text.Length < num)
+                    {
+                        num = text.Length;
+                    }
+                }
+            }
+            if (num != 2147483647)
+            {
+                return num;
+            }
+            return -1;
+        }
+
         private void AddElement(int[,] d, List<int> xList, List<int> yList, int x, int y)
         {
             int loc = 0;
@@ -627,14 +674,8 @@ namespace WFInfo
 
         public int LevenshteinDistance(string s, string t)
         {
-            switch (_settings.Locale)
-            {
-                case "ko":
-                    // for korean
-                    return LevenshteinDistanceKorean(s, t);
-                default:
-                    return LevenshteinDistanceDefault(s, t);
-            }
+            return _localizedLanguageProvider.CalculateLevenshteinDistance(
+                getLocaleNameData(s), s, t);
         }
 
         public int LevenshteinDistanceDefault(string s, string t)
@@ -703,7 +744,8 @@ namespace WFInfo
                 if (marketItem.Key == "version")
                     continue;
                 string[] split = marketItem.Value.ToString().Split('|');
-                if (split[0] == s)
+                if (_enLanguageProvider.GetNameWithoutBlueprint(split[0], "").Trim() ==
+                    _enLanguageProvider.GetNameWithoutBlueprint(s, "").Trim())
                 {
                     if (split.Length == 3)
                     {
@@ -956,41 +998,12 @@ namespace WFInfo
 
         public string GetSetName(string name)
         {
-            string result = name.ToLower(Main.culture);
+            return _enLanguageProvider.GetSetName(name);
+        }
 
-            if (result.Contains("kavasa"))
-            {
-                return "Kavasa Prime Kubrow Collar Set";
-            }
-
-            result = result.Replace("lower limb", "");
-            result = result.Replace("upper limb", "");
-            result = result.Replace("neuroptics", "");
-            result = result.Replace("chassis", "");
-            result = result.Replace("systems", "");
-            result = result.Replace("carapace", "");
-            result = result.Replace("cerebrum", "");
-            result = result.Replace("blueprint", "");
-            result = result.Replace("harness", "");
-            result = result.Replace("blade", "");
-            result = result.Replace("pouch", "");
-            result = result.Replace("head", "");
-            result = result.Replace("barrel", "");
-            result = result.Replace("receiver", "");
-            result = result.Replace("stock", "");
-            result = result.Replace("disc", "");
-            result = result.Replace("grip", "");
-            result = result.Replace("string", "");
-            result = result.Replace("handle", "");
-            result = result.Replace("ornament", "");
-            result = result.Replace("wings", "");
-            result = result.Replace("blades", "");
-            result = result.Replace("hilt", "");
-            result = result.Replace("link", "");
-            result = result.TrimEnd();
-            result = Main.culture.TextInfo.ToTitleCase(result);
-            result += " Set";
-            return result;
+        public string GetLocalizedSetName(string name)
+        {
+            return _localizedLanguageProvider.GetSetName(name);
         }
 
         public string GetRelicName(string string1)
