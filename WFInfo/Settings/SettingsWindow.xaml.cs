@@ -208,14 +208,13 @@ namespace WFInfo.Settings
 
         private void UpdateLocales()
         {
-            string[][] array = LocaleDataBuilder.FindLocales();
+            LocaleDataInfo[] localeInfos = Main.dataBase.FindLocaleInfos();
             localeCombobox.Items.Clear();
-            AddLocaleCBI("en", "English");
-            AddLocaleCBI("ko", "한국어");
-            foreach (string[] array3 in array)
+  
+            for (int i = 0; i < localeInfos.Length; i++)
             {
-                _viewModel.Locale.Equals(array3[2]);
-                AddLocaleCBI(array3[0], array3[2]);
+                bool isSelected = _viewModel.Locale.Equals(localeInfos[i].name);
+                AddLocaleCBI(localeInfos[i].key, localeInfos[i].name);
             }
             localeCombobox.Items.Refresh();
         }

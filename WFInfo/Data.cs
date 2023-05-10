@@ -13,17 +13,17 @@ using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 using WebSocketSharp;
 using WFInfo.LanguageSupport;
 using WFInfo.Settings;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace WFInfo
 {
     class Data
     {
-        public JObject marketItems; // Warframe.market item listing           {<id>: "<name>|<url_name>", ...}
+        public const char ITEMS_SEPARATOR_CHAR = '|';
+
+        public JObject marketItems; // Warframe.market item listing           {<id>: "<name>|<url_name>|<localized_name>", ...}
         public JObject marketData; // Contains warframe.market ducatonator listing     {<partName>: {"ducats": <ducat_val>,"plat": <plat_val>}, ...}
         public JObject relicData; // Contains relicData from Warframe PC Drops        {<Era>: {"A1":{"vaulted": true,<rare1/uncommon[12]/common[123]>: <part>}, ...}, "Meso": ..., "Neo": ..., "Axi": ...}
         public JObject equipmentData; // Contains equipmentData from Warframe PC Drops          {<EQMT>: {"vaulted": true, "PARTS": {<NAME>:{"relic_name":<name>|"","count":<num>}, ...}},  ...}
@@ -31,28 +31,6 @@ namespace WFInfo
 
         public DataLanguageBase enLanguageProvider => _enLanguageProvider;
         public DataLanguageBase localizedLanguageProvider => _localizedLanguageProvider;
-
-        private static List<Dictionary<int, List<int>>> korean = new List<Dictionary<int, List<int>>>() {
-            new Dictionary<int, List<int>>() {
-                { 0, new List<int>{ 6, 7, 8, 16 } }, // ㅁ, ㅂ, ㅃ, ㅍ
-                { 1, new List<int>{ 2, 3, 4, 16, 5, 9, 10 } }, // ㄴ, ㄷ, ㄸ, ㅌ, ㄹ, ㅅ, ㅆ
-                { 2, new List<int>{ 12, 13, 14 } }, // ㅈ, ㅉ, ㅊ
-                { 3, new List<int>{ 0, 1, 15, 11, 18 } } // ㄱ, ㄲ, ㅋ, ㅇ, ㅎ
-            },
-            new Dictionary<int, List<int>>() {
-                { 0, new List<int>{ 20, 5, 1, 7, 3, 19 } }, // ㅣ, ㅔ, ㅐ, ㅖ, ㅒ, ㅢ
-                { 1, new List<int>{ 16, 11, 15, 10 } }, // ㅟ, ㅚ, ㅞ, ㅙ
-                { 2, new List<int>{ 4, 0, 6, 2, 14, 9 } }, // ㅓ, ㅏ, ㅕ, ㅑ, ㅝ, ㅘ
-                { 3, new List<int>{ 18, 13, 8, 17, 12 } } // ㅡ, ㅜ, ㅗ, ㅠ, ㅛ
-            },
-            new Dictionary<int, List<int>>() {
-                { 0, new List<int>{ 16, 17, 18, 26 } }, // ㅁ, ㅂ, ㅄ, ㅍ
-                { 1, new List<int>{ 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 19, 20, 25 } }, // ㄴ, ㄵ, ㄶ, ㄷ, ㄹ, ㄺ, ㄻ, ㄼ, ㄽ, ㄾ, ㄿ, ㅀ, ㅅ, ㅆ, ㅌ
-                { 2, new List<int>{ 22, 23 } }, // ㅈ, ㅊ
-                { 3, new List<int>{ 1, 2, 3, 24, 21, 27 } }, // ㄱ, ㄲ, ㄳ, ㅋ, ㅑ, ㅎ
-                { 4, new List<int>{ 0 } }, // 
-            }
-        };
 
         private readonly string applicationDirectory = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + @"\WFInfo";
         private readonly string marketItemsPath;
@@ -95,7 +73,7 @@ namespace WFInfo
 
             Directory.CreateDirectory(applicationDirectory);
 
-            LocaleDataBuilder.BuildDefault();
+            LocaleDataBuilder.InitializeCustomLocaleDir();
             _enLanguageProvider = DataLanguageBase.CreateDefault();
             _localizedLanguageProvider = DataLanguageBase.CreateLocalized(settings.Locale);
 
@@ -167,9 +145,9 @@ namespace WFInfo
             return Main.VersionToInteger(Main.BuildVersion);
         }
 
-        public string[][] FindMoreLocales()
+        public LocaleDataInfo[] FindLocaleInfos()
         {
-            return LocaleDataBuilder.FindLocales();
+            return LocaleDataBuilder.FindLocaleInfos();
         }
 
         public void UpdateLocaleFromSettings()
@@ -197,7 +175,7 @@ namespace WFInfo
                     {
                         name = _enLanguageProvider.GetNameWithoutBlueprint(name, " ");
                     }
-                    marketItems[item["id"].ToString()] = name + "|" + item["url_name"];
+                    marketItems[item["id"].ToString()] = name + ITEMS_SEPARATOR_CHAR + item["url_name"];
                 }
             }
 
@@ -229,7 +207,7 @@ namespace WFInfo
                         string name = item["url_name"].ToString();
                         if (name.Contains("prime") && marketItems.ContainsKey(item["id"].ToString()))
                         {
-                            marketItems[item["id"].ToString()] = marketItems[item["id"].ToString()] + "|" + item["item_name"];
+                            marketItems[item["id"].ToString()] = marketItems[item["id"].ToString()] + ITEMS_SEPARATOR_CHAR.ToString() + item["item_name"];
                         }
                     }
                 }
@@ -455,7 +433,7 @@ namespace WFInfo
             {
                 if (elem.Key != "version")
                 {
-                    string[] split = elem.Value.ToString().Split('|');
+                    string[] split = elem.Value.ToString().Split(ITEMS_SEPARATOR_CHAR);
                     string itemName = split[0];
                     string itemUrl = split[1];
                     if (!itemName.Contains(" Set") && !marketData.TryGetValue(itemName, out _))
@@ -498,7 +476,7 @@ namespace WFInfo
                 {
                     if (elem.Key != "version")
                     {
-                        string[] split = elem.Value.ToString().Split('|');
+                        string[] split = elem.Value.ToString().Split(ITEMS_SEPARATOR_CHAR);
                         string itemName = split[0];
                         string itemUrl = split[1];
                         if (!itemName.Contains(" Set") && !marketData.TryGetValue(itemName, out _))
@@ -609,28 +587,6 @@ namespace WFInfo
             return count;
         }
 
-        public int FindMinLenPartNameLocalized()
-        {
-            int num = int.MaxValue;
-            foreach (KeyValuePair<string, JToken> keyValuePair in marketItems)
-            {
-                string[] array = keyValuePair.Value.ToString().Split(new char[] { '|' });
-                if (array.Length > 2)
-                {
-                    string text = array[2];
-                    if (text.Length < num)
-                    {
-                        num = text.Length;
-                    }
-                }
-            }
-            if (num != 2147483647)
-            {
-                return num;
-            }
-            return -1;
-        }
-
         private void AddElement(int[,] d, List<int> xList, List<int> yList, int x, int y)
         {
             int loc = 0;
@@ -727,14 +683,6 @@ namespace WFInfo
             return d[n, m];
         }
 
-        public static bool isKorean(String str)
-        {
-            char c = str[0];
-            if (0x1100 <= c && c <= 0x11FF) return true;
-            if (0x3130 <= c && c <= 0x318F) return true;
-            if (0xAC00 <= c && c <= 0xD7A3) return true;
-            return false;
-        }
         public string getLocaleNameData(string s)
         {
             bool saveDatabases = false;
@@ -743,10 +691,11 @@ namespace WFInfo
             {
                 if (marketItem.Key == "version")
                     continue;
-                string[] split = marketItem.Value.ToString().Split('|');
+                string[] split = marketItem.Value.ToString().Split(ITEMS_SEPARATOR_CHAR);
                 if (_enLanguageProvider.GetNameWithoutBlueprint(split[0], "").Trim() ==
                     _enLanguageProvider.GetNameWithoutBlueprint(s, "").Trim())
                 {
+                    // Get localized name if it's not an english
                     if (split.Length == 3)
                     {
                         localeName = split[2];
@@ -763,79 +712,6 @@ namespace WFInfo
             return localeName;
         }
         private protected static string e = "A?s/,;j_<Z3Q4z&)";
-
-        public int LevenshteinDistanceKorean(string s, string t)
-        {
-            // NameData s 를 한글명으로 가져옴
-            s = getLocaleNameData(s);
-
-            // i18n korean edit distance algorithm
-            s = " " + s.Replace("설계도", "").Replace(" ", "");
-            t = " " + t.Replace("설계도", "").Replace(" ", "");
-
-            int n = s.Length;
-            int m = t.Length;
-            int[,] d = new int[n + 1, m + 1];
-
-            if (n == 0 || m == 0)
-                return n + m;
-            int i, j;
-
-            for (i = 1; i < s.Length; i++) d[i, 0] = i * 9;
-            for (j = 1; j < t.Length; j++) d[0, j] = j * 9;
-
-            int s1, s2;
-
-            for (i = 1; i < s.Length; i++)
-            {
-                for (j = 1; j < t.Length; j++)
-                {
-                    s1 = 0;
-                    s2 = 0;
-
-                    char cha = s[i];
-                    char chb = t[j];
-                    int[] a = new int[3];
-                    int[] b = new int[3];
-                    a[0] = (((cha - 0xAC00) - (cha - 0xAC00) % 28) / 28) / 21;
-                    a[1] = (((cha - 0xAC00) - (cha - 0xAC00) % 28) / 28) % 21;
-                    a[2] = (cha - 0xAC00) % 28;
-
-                    b[0] = (((chb - 0xAC00) - (chb - 0xAC00) % 28) / 28) / 21;
-                    b[1] = (((chb - 0xAC00) - (chb - 0xAC00) % 28) / 28) % 21;
-                    b[2] = (chb - 0xAC00) % 28;
-
-                    if (a[0] != b[0] && a[1] != b[1] && a[2] != b[2])
-                    {
-                        s1 = 9;
-                    }
-                    else
-                    {
-                        for (int k = 0; k < 3; k++)
-                        {
-                            if (a[k] != b[k])
-                            {
-                                if (GroupEquals(korean[k], a[k], b[k]))
-                                {
-                                    s2 += 1;
-                                }
-                                else
-                                {
-                                    s1 += 1;
-                                }
-                            }
-
-                        }
-                        s1 *= 3;
-                        s2 *= 2;
-                    }
-
-                    d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 9, d[i, j - 1] + 9), d[i - 1, j - 1] + s1 + s2);
-                }
-            }
-
-            return d[s.Length - 1, t.Length - 1];
-        }
 
         private bool GroupEquals(Dictionary<int, List<int>> group, int ak, int bk)
         {
@@ -1421,7 +1297,7 @@ namespace WFInfo
         {
             foreach (var marketItem in marketItems)
             {
-                if (marketItem.Value.ToString().Split('|').First().Equals(primeItem, StringComparison.OrdinalIgnoreCase))
+                if (marketItem.Value.ToString().Split(ITEMS_SEPARATOR_CHAR).First().Equals(primeItem, StringComparison.OrdinalIgnoreCase))
                 {
                     return marketItem.Key;
                 }
@@ -1506,7 +1382,7 @@ namespace WFInfo
         {
             foreach (var marketItem in marketItems)
             {
-                string[] vals = marketItem.Value.ToString().Split('|');
+                string[] vals = marketItem.Value.ToString().Split(ITEMS_SEPARATOR_CHAR);
                 if (vals.Length > 2 && vals[0].Equals(primeName, StringComparison.OrdinalIgnoreCase))
                 {
                     return vals[1];

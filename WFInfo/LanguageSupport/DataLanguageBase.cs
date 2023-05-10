@@ -1,5 +1,9 @@
-﻿using System;
+﻿using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Globalization;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace WFInfo.LanguageSupport
 {
@@ -12,7 +16,9 @@ namespace WFInfo.LanguageSupport
             KOREAN,
         }
 
-        protected LocaleData _localeData;
+        protected LocaleData localeData;
+		protected CultureInfo culture => Main.culture;
+		protected char itemsDelimiter => Data.ITEMS_SEPARATOR_CHAR;
 
         protected DataLanguageBase(LocaleData localeData)
 		{
@@ -21,71 +27,63 @@ namespace WFInfo.LanguageSupport
 				Main.AddLog("Load default LocaleData (en)");
 				localeData = LocaleDataBuilder.GetEnglish();
 			}
-			Main.AddLog(string.Concat(new string[]
-			{
-				"Set LocaleData (",
-				localeData.localeName,
-				") for '",
-				base.GetType().Name,
-				"'"
-			}));
-			_localeData = localeData;
+			Main.AddLog("Set LocaleData ("
+					  + localeData.localeName
+					  + ") for '"
+					  + GetType().Name
+					  + "'"
+			);
+			this.localeData = localeData;
 		}
 
 		public static DataLanguageBase CreateDefault()
 		{
-			return new SimpleDataLanguage(default(LocaleData));
+			return new SimpleDataLanguage(default);
 		}
 
 		public static DataLanguageBase CreateLocalized(string settingsLocale)
 		{
-			DataLanguageBase.Language type = DataLanguageBase.Language.SIMPLE;
+			Language type = Language.SIMPLE;
 			if (settingsLocale == "ko")
 			{
-				type = DataLanguageBase.Language.KOREAN;
+				type = Language.KOREAN;
 			}
-			LocaleData localeData = LocaleDataBuilder.ReadLocaleFile(settingsLocale);
-			return DataLanguageBase.CreateLocalized(type, localeData);
+			LocaleData localeData = LocaleDataBuilder.ReadLocaleData(settingsLocale);
+			return CreateLocalized(type, localeData);
 		}
 
-		public static DataLanguageBase CreateLocalized(DataLanguageBase.Language type, LocaleData localeData)
+		public static DataLanguageBase CreateLocalized(Language type, LocaleData localeData)
 		{
 			switch (type)
 			{
-			case DataLanguageBase.Language.SIMPLE:
+			case Language.SIMPLE:
 				return new SimpleDataLanguage(localeData);
-			case DataLanguageBase.Language.KOREAN:
+			case Language.KOREAN:
 				return new KoreanDataLanguage(localeData);
 			}
-			return DataLanguageBase.CreateDefault();
+			return CreateDefault();
 		}
 
 		public virtual int CalculateLevenshteinDistance(string localizedName, string firstWord, string secondWord)
 		{
-			firstWord = ReplaceKeyString(firstWord, _localeData.levenshteinDistanceReplaces, "");
-			secondWord = ReplaceKeyString(secondWord, _localeData.levenshteinDistanceReplaces, "");
+			firstWord = ReplaceKeyString(firstWord, localeData.levenshteinDistanceReplaces, "");
+			secondWord = ReplaceKeyString(secondWord, localeData.levenshteinDistanceReplaces, "");
 			return CalculateLevenshteinDistanceDefault(firstWord, secondWord);
 		}
 
         public virtual bool isItLanguage(string str)
         {
-            if (_localeData.minLanguageChars == null || _localeData.minLanguageChars.Length == 0)
-            {
-                return true;
-            }
-            if (_localeData.maxLanguageChars == null || _localeData.maxLanguageChars.Length == 0)
-            {
-                return true;
-            }
-            if (_localeData.minLanguageChars.Length != _localeData.maxLanguageChars.Length)
+			LocaleData.MinMaxLocaleChars[] minMaxChars = localeData.minMaxLanguageChars;
+
+            if (minMaxChars == null || minMaxChars.Length == 0)
             {
                 return true;
             }
 
             char c = str[0];
-            for (int i = 0; i < _localeData.minLanguageChars.Length; i++)
+            for (int i = 0; i < minMaxChars.Length; i++)
             {
-                if (_localeData.minLanguageChars[i] <= (int)c && (int)c <= _localeData.maxLanguageChars[i])
+                if (minMaxChars[i].min <= (int)c && (int)c <= minMaxChars[i].max)
                 {
                     return true;
                 }
@@ -94,96 +92,118 @@ namespace WFInfo.LanguageSupport
             return false;
         }
 
-        public int GetMininunLenght()
+		public virtual bool PartNameValid(string name)
 		{
-			return _localeData.minPartNameLenght;
+			return name.Length >= localeData.minPartNameLenght;
 		}
 
 		public string GetMarketItemsLocale()
 		{
-			return _localeData.localeNameMarket;
+			return localeData.localeNameMarket;
 		}
 
 		public string GetLanguageName()
 		{
-			return _localeData.localeName;
+			return localeData.localeName;
 		}
 
 		public string GetOcrCharWhitelist()
 		{
-			return _localeData.ocrCharWhitelist;
+			return localeData.ocrCharWhitelist;
 		}
 
 		public string GetNameWithoutBlueprint(string name, string space = " ")
 		{
-			return ReplaceKeyString(name, _localeData.blueprintKey, space);
+			return ReplaceKeyString(name, localeData.blueprintKey, space);
 		}
 
 		public string GetNameWithBlueprint(string name, string space = " ")
 		{
-			string str = ParseBlueprintKey();
-			return name + space + str;
+			if (string.IsNullOrEmpty(localeData.blueprintFormat))
+			{
+                string str = localeData.blueprintKey.Split(itemsDelimiter)[0];
+                return name + space + str;
+			}
+
+			return string.Format(localeData.blueprintFormat, name);
 		}
 
 		public string GetNameWithPrimeBlueprint(string name, string space = " ")
 		{
-			string text = ParseBlueprintKey();
-			return string.Concat(new string[]
+            if (string.IsNullOrEmpty(localeData.primeBlueprintFormat))
 			{
-				name,
-				space,
-				_localeData.primeKey.ToLower(Main.culture),
-				space,
-				text
-			});
-		}
+                string blp = localeData.blueprintKey.Split(itemsDelimiter)[0];
+                string prime = localeData.primeKey.Split(itemsDelimiter)[0];
+
+                return string.Concat(new string[]
+                {
+                name,
+                space,
+                prime.ToLower(culture),
+                space,
+                blp
+                });
+            }
+
+            return string.Format(localeData.primeBlueprintFormat, name);
+        }
 
 		public string GetSetName(string name)
 		{
-			string text = name.ToLower(Main.culture);
-			text = ReplaceKeyString(text, _localeData.lowerLimbKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.upperLimbKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.neuropticsKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.chassisKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.systemsKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.carapaceKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.cerebrumKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.blueprintKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.harnessKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.bladeKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.pouchKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.headKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.barrelKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.receiverKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.stockKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.discKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.gripKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.stringKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.handleKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.ornamentKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.wingsKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.bladesKey.ToLower(Main.culture), "");
-			text = ReplaceKeyString(text, _localeData.hiltKey.ToLower(Main.culture), "");
-			text = text.TrimEnd(Array.Empty<char>());
-			return Main.culture.TextInfo.ToTitleCase(text);
+			string result = name.ToLower(culture);
+
+			if (result.Contains(localeData.kavasaKey))
+			{
+				return localeData.kavasaSetName;
+            }
+
+			result = ReplaceKeyString(result, localeData.lowerLimbKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.upperLimbKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.neuropticsKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.chassisKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.systemsKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.carapaceKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.cerebrumKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.blueprintKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.harnessKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.bladeKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.pouchKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.headKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.barrelKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.receiverKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.stockKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.discKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.gripKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.stringKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.handleKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.ornamentKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.wingsKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.bladesKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.hiltKey.ToLower(culture), "");
+			result = ReplaceKeyString(result, localeData.linkKey.ToLower(culture), "");
+
+            result += " " + localeData.setKey;
+
+            result = result.TrimEnd(Array.Empty<char>());
+			return culture.TextInfo.ToTitleCase(result);
 		}
 
         public bool IsNameDataIgnored(string value)
 		{
-			if (CheckIgnoredRule(value, _localeData.ignoredForma)
-			 || CheckIgnoredRule(value, _localeData.ignoredExsilusWeaponAdapter)
-			 || CheckIgnoredRule(value, _localeData.ignoredKuva)
-			 || CheckIgnoredRule(value, _localeData.ignoredRivenSliver)
-			 || CheckIgnoredRule(value, _localeData.ignoredAyatanAmberStar))
+			if (CheckIgnoredRule(value, localeData.ignoredForma)
+			 || CheckIgnoredRule(value, localeData.ignoredExsilusWeaponAdapter)
+			 || CheckIgnoredRule(value, localeData.ignoredKuva)
+			 || CheckIgnoredRule(value, localeData.ignoredRivenSliver)
+			 || CheckIgnoredRule(value, localeData.ignoredAyatanAmberStar))
 			{
 				return true;
 			}
 
-			if (_localeData.ignoredAdditional != null)
+			if (localeData.ignoredAdditional != null)
 			{
-				for (int i = 0; i < _localeData.ignoredAdditional.Length; i++)
+				for (int i = 0; i < localeData.ignoredAdditional.Length; i++)
 				{
-					if (CheckIgnoredRule(value, _localeData.ignoredAdditional[i]))
+					if (CheckIgnoredRule(value, localeData.ignoredAdditional[i]))
 					{
 						return true;
 					}
@@ -195,25 +215,25 @@ namespace WFInfo.LanguageSupport
 
         public bool CheckArchwingOrWarframesBlueprintKeys(string name)
         {
-            return name.Contains(_localeData.neuropticsKey)
-				|| name.Contains(_localeData.chassisKey)
-				|| name.Contains(_localeData.systemsKey)
-				|| name.Contains(_localeData.harnessKey)
-				|| name.Contains(_localeData.wingsKey);
+            return name.Contains(localeData.neuropticsKey)
+				|| name.Contains(localeData.chassisKey)
+				|| name.Contains(localeData.systemsKey)
+				|| name.Contains(localeData.harnessKey)
+				|| name.Contains(localeData.wingsKey);
         }
 
         public bool CheckContainsWarframesBlueprintKeys(string name)
         {
-            return name.Contains(_localeData.neuropticsKey)
-				|| name.Contains(_localeData.chassisKey)
-				|| name.Contains(_localeData.systemsKey);
+            return name.Contains(localeData.neuropticsKey)
+				|| name.Contains(localeData.chassisKey)
+				|| name.Contains(localeData.systemsKey);
         }
 
         public bool CheckContainsArchwingBlueprintKeys(string name)
         {
-            return name.Contains(_localeData.systemsKey)
-				|| name.Contains(_localeData.harnessKey)
-				|| name.Contains(_localeData.wingsKey);
+            return name.Contains(localeData.systemsKey)
+				|| name.Contains(localeData.harnessKey)
+				|| name.Contains(localeData.wingsKey);
         }
 
         protected bool GroupEquals(Dictionary<int, List<int>> group, int ak, int bk)
@@ -236,70 +256,63 @@ namespace WFInfo.LanguageSupport
 			}
 
 			string text = s;
-			if (rule.Contains("|"))
-			{
-				string[] array = rule.Split(new char[] { '|' });
-				for (int i = 0; i < array.Length; i++)
-				{
-					text = text.Replace(space + array[i], "");
-				}
-			}
-			else
-			{
-				text = text.Replace(space + rule, "");
-			}
+			string[] ruleSplit = rule.Split(itemsDelimiter);
+			for (int i = 0; i < ruleSplit.Length; i++)
+            {
+                text = text.Replace(space + ruleSplit[i], "");
+            }
 
 			return text;
 		}
 
 		protected int CalculateLevenshteinDistanceDefault(string s, string t)
 		{
-			s = s.ToLower(Main.culture);
-			t = t.ToLower(Main.culture);
-			int length = s.Length;
-			int length2 = t.Length;
-			int[,] array = new int[length + 1, length2 + 1];
+            // Levenshtein Distance determines how many character changes it takes to form a known result
+            // For example: Nuvo Prime is closer to Nova Prime (2) then Ash Prime (4)
+            // For more info see: https://en.wikipedia.org/wiki/Levenshtein_distance
+            s = s.ToLower(culture);
+            t = t.ToLower(culture);
+            int n = s.Length;
+            int m = t.Length;
+            int[,] d = new int[n + 1, m + 1];
 
-			if (length == 0 || length2 == 0)
-			{
-				return length + length2;
-			}
+            if (n == 0 || m == 0)
+                return n + m;
 
-			array[0, 0] = 0;
-			int num = 0;
-			for (int i = 1; i <= length; i++)
-			{
-				array[i, 0] = ((s[i - 1] == ' ') ? num : (++num));
-			}
-			num = 0;
-			for (int j = 1; j <= length2; j++)
-			{
-				array[0, j] = ((t[j - 1] == ' ') ? num : (++num));
-			}
-			for (int k = 1; k <= length; k++)
-			{
-				for (int l = 1; l <= length2; l++)
-				{
-					int num2 = array[k - 1, l];
-					if (s[k - 1] != ' ')
-					{
-						num2++;
-					}
-					int num3 = array[k, l - 1];
-					if (t[l - 1] != ' ')
-					{
-						num3++;
-					}
-					int num4 = array[k - 1, l - 1];
-					if (t[l - 1] != s[k - 1])
-					{
-						num4++;
-					}
-					array[k, l] = Math.Min(Math.Min(num2, num3), num4);
-				}
-			}
-			return array[length, length2];
-		}
+            d[0, 0] = 0;
+
+            int count = 0;
+            for (int i = 1; i <= n; i++)
+                d[i, 0] = (s[i - 1] == ' ' ? count : ++count);
+
+            count = 0;
+            for (int j = 1; j <= m; j++)
+                d[0, j] = (t[j - 1] == ' ' ? count : ++count);
+
+            for (int i = 1; i <= n; i++)
+                for (int j = 1; j <= m; j++)
+                {
+                    // deletion of s
+                    int opt1 = d[i - 1, j];
+                    if (s[i - 1] != ' ')
+                        opt1++;
+
+                    // deletion of t
+                    int opt2 = d[i, j - 1];
+                    if (t[j - 1] != ' ')
+                        opt2++;
+
+                    // swapping s to t
+                    int opt3 = d[i - 1, j - 1];
+                    if (t[j - 1] != s[i - 1])
+                        opt3++;
+                    d[i, j] = Math.Min(Math.Min(opt1, opt2), opt3);
+                }
+
+
+
+            return d[n, m];
+        }
 
         private bool CheckIgnoredRule(string value, string[] ignoredRule)
         {
@@ -307,20 +320,8 @@ namespace WFInfo.LanguageSupport
             {
                 return false;
             }
-            string[] array = ignoredRule[0].Split(new char[]
-            {
-                ' '
-            });
-            return array.Length >= 1 && value.ToLower(Main.culture).Contains(array[0].ToLower(Main.culture));
+            string[] array = ignoredRule[0].Split(' ');
+            return array.Length >= 1 && value.ToLower(culture).Contains(array[0].ToLower(culture));
         }
-
-        private string ParseBlueprintKey()
-		{
-			if (!_localeData.blueprintKey.Contains("|"))
-			{
-				return _localeData.blueprintKey;
-			}
-			return _localeData.blueprintKey.Split(new char[] { '|' })[0];
-		}
 	}
 }

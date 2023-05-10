@@ -2,19 +2,31 @@
 
 namespace WFInfo.LanguageSupport
 {
-	[Serializable]
+    [Serializable]
 	public struct LocaleData
 	{
+        [Serializable]
+        public struct MinMaxLocaleChars
+		{
+			public int min;
+			public int max;
+
+            public MinMaxLocaleChars(int min, int max)
+            {
+                this.min = min;
+                this.max = max;
+            }
+        }
+
 		public string localeName;
 		public string localeNameMarket;
 
-		public string traineddataChecksum;
+		public string trainedDataChecksum;
 		public string regexSymbols;
 		public string ocrCharWhitelist;
 		public string levenshteinDistanceReplaces;
 
-		public int[] minLanguageChars;
-		public int[] maxLanguageChars;
+		public MinMaxLocaleChars[] minMaxLanguageChars;
 
 		public int minPartNameLenght;
 
@@ -44,11 +56,36 @@ namespace WFInfo.LanguageSupport
 		public string stockKey;
 		public string discKey;
 		public string gripKey;
+		// Need remove it?
 		public string stringKey;
 		public string handleKey;
 		public string ornamentKey;
 		public string bladesKey;
 		public string hiltKey;
+		public string linkKey;
 		public string starsKey;
+
+		public string kavasaKey;
+		public string kavasaSetName;
+		public string setKey;
+
+        /// <summary>
+        /// "{0} ***" {0} - partName
+        /// </summary>
+        public string blueprintFormat;
+        /// <summary>
+        /// "{0} ***" {0} - partName
+        /// </summary>
+        public string primeBlueprintFormat;
+
+		public LocaleDataInfo GetLocaleInfo()
+		{
+			return new LocaleDataInfo()
+			{
+                key = localeNameMarket,
+                trainedDataChecksum = trainedDataChecksum,
+                name = localeName
+            };
+		}
 	}
 }

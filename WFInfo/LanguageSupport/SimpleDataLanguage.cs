@@ -12,23 +12,28 @@ namespace WFInfo.LanguageSupport
 		{
 			string text = ReplaceIfIgnored(firstWord);
 			firstWord = ((text != firstWord) ? text : localizedName);
-			firstWord = ReplaceKeyString(firstWord, _localeData.levenshteinDistanceReplaces, "").Trim();
-			secondWord = ReplaceKeyString(secondWord, _localeData.levenshteinDistanceReplaces, "").Trim();
+			firstWord = ReplaceKeyString(firstWord, localeData.levenshteinDistanceReplaces, "").Trim();
+			secondWord = ReplaceKeyString(secondWord, localeData.levenshteinDistanceReplaces, "").Trim();
 			return CalculateLevenshteinDistanceDefault(firstWord, secondWord);
 		}
 
-		protected string ReplaceIfIgnored(string word)
+        //public override bool PartNameValid(string name)
+        //{
+        //    return base.PartNameValid(name.Replace(" ", ""));
+        //}
+
+        protected string ReplaceIfIgnored(string word)
 		{
-			word = ReplaceIfIgnoredMatch(word, _localeData.ignoredForma);
-			word = ReplaceIfIgnoredMatch(word, _localeData.ignoredExsilusWeaponAdapter);
-			word = ReplaceIfIgnoredMatch(word, _localeData.ignoredKuva);
-			word = ReplaceIfIgnoredMatch(word, _localeData.ignoredRivenSliver);
-			word = ReplaceIfIgnoredMatch(word, _localeData.ignoredAyatanAmberStar);
-			if (_localeData.ignoredAdditional != null)
+			word = ReplaceIfIgnoredMatch(word, localeData.ignoredForma);
+			word = ReplaceIfIgnoredMatch(word, localeData.ignoredExsilusWeaponAdapter);
+			word = ReplaceIfIgnoredMatch(word, localeData.ignoredKuva);
+			word = ReplaceIfIgnoredMatch(word, localeData.ignoredRivenSliver);
+			word = ReplaceIfIgnoredMatch(word, localeData.ignoredAyatanAmberStar);
+			if (localeData.ignoredAdditional != null)
 			{
-				for (int i = 0; i < _localeData.ignoredAdditional.Length; i++)
+				for (int i = 0; i < localeData.ignoredAdditional.Length; i++)
 				{
-					word = ReplaceIfIgnoredMatch(word, _localeData.ignoredAdditional[i]);
+					word = ReplaceIfIgnoredMatch(word, localeData.ignoredAdditional[i]);
 				}
 			}
 			return word;

@@ -3,6 +3,7 @@ using System.IO;
 using System.Net;
 using Newtonsoft.Json.Linq;
 using Tesseract;
+using WFInfo.LanguageSupport;
 using WFInfo.Settings;
 
 namespace WFInfo
@@ -90,17 +91,14 @@ namespace WFInfo
 
         private JObject GetCheckSums()
         {
-            JObject jobject = new JObject
-            {
-                { "en", "7af2ad02d11702c7092a5f8dd044d52f" },
-                { "ko", "c776744205668b7e76b190cc648765da" }
-            };
+            // item { key, checksum }
+            JObject jobject = new JObject();
 
-            string[][] moreLocales = Main.dataBase.FindMoreLocales();
-            int length = moreLocales.GetLength(0);
+            LocaleDataInfo[] localeInfos = Main.dataBase.FindLocaleInfos();
+            int length = localeInfos.GetLength(0);
             for (int i = 0; i < length; i++)
             {
-                jobject.Add(moreLocales[i][0], moreLocales[i][1]);
+                jobject.Add(localeInfos[i].key, localeInfos[i].trainedDataChecksum);
             }
 
             return jobject;

@@ -650,7 +650,7 @@ namespace WFInfo
         /// <returns>If part name is close enough to valid to actually process</returns>
         internal static bool PartNameValid (string partName)
         {
-            return partName.Length >= Main.dataBase.localizedLanguageProvider.GetMininunLenght();
+            return Main.dataBase.localizedLanguageProvider.PartNameValid(partName);
         }
 
         /// <summary>
@@ -1541,6 +1541,11 @@ namespace WFInfo
         /// <param name="fullShot">Image to scan</param>
         internal static void ProcessProfileScreen(Bitmap fullShot)
         {
+            if (Main.dataBase.enLanguageProvider.GetLanguageName() != Main.dataBase.localizedLanguageProvider.GetLanguageName())
+            {
+                Main.StatusUpdate("ProcessProfileScreen not impl for not english language", 1);
+                return;
+            }
             System.Diagnostics.Stopwatch watch = new Stopwatch();
             watch.Start();
             long start = watch.ElapsedMilliseconds;
@@ -1551,13 +1556,16 @@ namespace WFInfo
             for (int i = 0; i < foundParts.Count; i++)
             {
                 InventoryItem part = foundParts[i];
-                if (!PartNameValid(part.Name + " Blueprint"))
+                string partNameWithBlueprint = Main.dataBase.enLanguageProvider.GetNameWithBlueprint(part.Name, " ");
+                string partNameWithPrimeBlueprint = Main.dataBase.enLanguageProvider.GetNameWithBlueprint(part.Name, " ");
+                //string partNameWithBlueprint = Main.dataBase.localizedLanguageProvider.GetNameWithBlueprint(part.Name, " ");
+                //string partNameWithPrimeBlueprint = Main.dataBase.localizedLanguageProvider.GetNameWithBlueprint(part.Name, " ");
+
+                if (!PartNameValid(partNameWithBlueprint))
                     continue;
                 // TODO: change for localized
-                string name = Main.dataBase.GetPartName(part.Name+" Blueprint", out int proximity, true, out _); //add blueprint to name to check against prime drop table
-                string checkName = Main.dataBase.GetPartName(part.Name + " prime Blueprint", out int primeProximity, true, out _); //also add prime to check if that gives better match. If so, this is a non-prime
-                string nameWithBlueprint = Main.dataBase.localizedLanguageProvider.GetNameWithBlueprint(part.Name, " ");
-                string nameWithPrimeBlueprint = Main.dataBase.localizedLanguageProvider.GetNameWithPrimeBlueprint(part.Name, " ");
+                string name = Main.dataBase.GetPartName(partNameWithBlueprint, out int proximity, true, out _); //add blueprint to name to check against prime drop table
+                string checkName = Main.dataBase.GetPartName(partNameWithPrimeBlueprint, out int primeProximity, true, out _); //also add prime to check if that gives better match. If so, this is a non-prime
                 Main.AddLog("Checking \"" + part.Name.Trim() +"\", (" + proximity +")\"" + name + "\", +prime (" + primeProximity + ")\"" + checkName + "\"");
 
                 //Decide if item is an actual prime, if so mark as mastered
